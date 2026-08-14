@@ -1,7 +1,8 @@
 # CLAUDE.md — stata-to-latex-pipeline
 
-A **reproducible Stata → LaTeX table pipeline** built on the [GSLab SCons
-template](../template). It is the pipeline version of the
+A **reproducible Stata → LaTeX table pipeline** built on the [`andyzhou66` fork of the GSLab SCons
+template](https://github.com/andyzhou66/template) (local copy in
+[`../template`](../template)). It is the pipeline version of the
 `../dou-bao-stata-to-latex` tutorial: a single Stata do-file + a LaTeX tutorial
 document, re-organized into a tracked, incremental, one-command build.
 

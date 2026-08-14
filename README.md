@@ -1,0 +1,264 @@
+# Stata-to-LaTeX Table Pipeline
+
+A reproducible [SCons](http://scons.org/) pipeline that turns Stata estimation
+output into publication-quality LaTeX tables, compiling a tutorial PDF
+end-to-end from data to document. It is the pipeline version of the
+`dou-bao-stata-to-latex` tutorial, re-organised onto the
+[`andyzhou66` fork of the GSLab reproducible-research template](https://github.com/andyzhou66/template)
+pattern: a flat numbered-step architecture, `env.Install()` data flow between
+steps, and `BuildStata` / `BuildLatex` builders from `gslab_scons`.
+
+One command builds the whole chain:
+
+```
+webuse nlswork  →  18 estout table fragments  →  41-page guidelines PDF
+ 1.prepare-data        2.generate-tables            3.build-paper
+```
+
+The pipeline uses **only Stata built-in datasets** (`webuse nlswork`), so it runs
+anywhere with an internet connection — no external data files to obtain.
+
+## What it demonstrates
+
+The full `estout` workflow for exporting Stata results to LaTeX:
+
+- **Descriptive tables** — `estpost tabstat` with `main/aux`, `cells()`, custom
+  bracket styles, row-wise decimal places, wide tables with `\multicolumn`
+  group headers.
+- **Regression tables** — panel regressions (`xtreg`), lags, multi-model
+  comparisons, custom `estadd` statistic rows (FE/TE/cluster-SE diagnostics),
+  `mgroups` grouping, multi-panel `append`, DID-style coefficient extraction.
+- **Two LaTeX backends** — classic `tabular` (via the `\loadfrag` wrapper) and
+  modern `tabularray` (`tblr` with `siunitx` columns).
+- **Live in-text numbers** — `texresults` exports scalars (`e(N)`, `e(F)`) as
+  LaTeX macros that update automatically when the regression changes.
+
+## Quick start
+
+### 1. Prerequisites
+
+| Tool | Requirement |
+|------|-------------|
+| **Python 3.11** | Runs `scons`. On this machine: `C:\Program Files\Python311\python.exe`. |
+| **SCons ≥ 4.0** | `pip install scons` |
+| **gslab_python** (the `andyzhou66` fork) | Provides `gslab_scons` builders — see below. |
+| **Stata** | `StataSE-64` in PATH (used in batch mode `/e do`). |
+| **estout** | `ssc install estout` (provides `esttab`/`estpost`/`estadd`/`texresults`). |
+| **pdflatex** | A TeX distribution (TeX Live 2021 or MiKTeX) with `booktabs`, `threeparttable`, `dcolumn`, `siunitx`, `tabularray`, `catchfile`, `makecell`. |
+
+### 2. Install the `gslab_scons` fork
+
+```bash
+python -m pip install --upgrade --force-reinstall --no-deps \
+  git+https://github.com/andyzhou66/gslab_python.git@master
+```
+
+> **`--force-reinstall` is required.** If `GSLab_Tools==4.1.2` is already
+> installed, a plain `pip install` prints *"Requirement already satisfied"* and
+> keeps the **old** files — the build then crashes on `import gslab_scons`.
+> Install into the same Python that runs `scons` (3.11 here), not the project
+> `.venv`.
+
+The fork must be the Py3-patched `master` (commit `3e5dad1` or later fixes the
+last SCons-path Py2-ism, `raw_input`, and the Windows encoding/pdflatex-path
+issues).
+
+### 3. Build
+
+```bash
+cd stata-to-latex-pipeline
+python run.py            # = scons ; builds data → tables → PDF
+```
+
+On the first run `config_user.yaml` is generated from the template. The final
+PDF lands in `3.build-paper/output/stata2latex_guidelines.pdf` (and `release/`).
+
+Other build commands:
+
+```bash
+python run.py -c                              # clean all outputs, then rebuild
+python run.py -n                              # dry-run (print what would build)
+python run.py 2.generate-tables/output/reg2.tex   # build a single target
+```
+
+## Folder structure
+
+Flat numbered-step architecture — each step is a top-level folder, and a single
+root `SConstruct` orchestrates the full build.
+
+```
+stata-to-latex-pipeline/
+  run.py                       # thin wrapper around the `scons` command
+  SConstruct                   # root build: BuildStata + BuildLatex + BuildPdf
+  config_global.yaml           # versioned config (gslab_version, prereqs, debrief)
+  config_user_template.yaml    # template for the local config
+  config_user.yaml             # local, auto-generated, gitignored
+  config/                      # configuration.py, requirements.txt, config_stata.do
+  1.prepare-data/              # Step 1: data preparation (Stata)
+    code/prepare_data.do
+    output/                    # nlswork_processed.dta   (gitignored)
+    temp/                      # build logs              (gitignored)
+  2.generate-tables/           # Step 2: table generation (Stata / estout)
+    code/generate_tables.do
+    input-data/                # nlswork_processed.dta copied from step 1 (gitignored)
+    output/                    # 18 table fragments + macro.tex  (gitignored)
+    temp/
+  3.build-paper/               # Step 3: PDF compilation (LaTeX)
+    code/stata2latex_guidelines.tex
+    code/build_pdf.py          # multi-pass pdflatex wrapper (see Build system)
+    input-data/                # fragments copied from step 2  (gitignored)
+    output/                    # stata2latex_guidelines.pdf    (gitignored)
+    temp/
+  tests/                       # pytest smoke tests (run independently of SCons)
+  docs/                        # reference snippets not in the build
+```
+
+`output/`, `input-data/`, `temp/`, and `release/` are build artifacts —
+regenerated by SCons and gitignored.
+
+| Item | Purpose | Versioned? |
+|------|---------|------------|
+| `code/` | Source scripts (`.do`, `.py`, `.tex`) | Yes |
+| `output/` | Files produced by the step | No (gitignored) |
+| `temp/` | Per-step SConscript build logs | No (gitignored) |
+| `input-data/` | Files copied from the previous step (steps 2–3) | No (gitignored) |
+
+## Pipeline steps
+
+| Step | Folder | Language | Primary input | Primary output |
+|------|--------|----------|---------------|----------------|
+| 1 | `1.prepare-data/` | Stata | `webuse nlswork` (built-in) | `output/nlswork_processed.dta` |
+| 2 | `2.generate-tables/` | Stata | `input-data/nlswork_processed.dta` | `output/{table*.tex, reg*.tex, macro.tex}` (18 fragments) |
+| 3 | `3.build-paper/` | LaTeX | `code/stata2latex_guidelines.tex` + fragments | `output/stata2latex_guidelines.pdf` |
+
+**Step 1** loads the NLS Youth Longitudinal Survey, builds a 7-group industry
+classification, standardises the outcome variables, and declares the panel
+(`xtset idcode year`).
+
+**Step 2** runs every `esttab` export in **one Stata session**. The session-state
+coupling — `eststo`/`estadd` results, the `$controls` global, and variable-label
+mutations — cannot cross `stata -b` invocation boundaries, so all table
+generation lives in a single `.do` rather than one `.do` per table.
+
+**Step 3** compiles the tutorial document, which embeds the fragments and walks
+through each table with code + explanation.
+
+### Data flow between steps
+
+Outputs propagate forward through `env.Install()`:
+
+```python
+# 1.prepare-data/SConscript
+env.Install('#2.generate-tables/input-data', '#1.prepare-data/output/nlswork_processed.dta')
+```
+
+SCons tracks these dependencies: if step 1's dataset changes, steps 2 and 3 are
+rebuilt in order. No manual copying. The `#` prefix means "relative to the
+SConstruct directory" (the pipeline root).
+
+## Build system
+
+The build is orchestrated by **SCons** through a single root `SConstruct` and
+one `SConscript` per step.
+
+### Root SConstruct
+
+1. Ensures `config_user.yaml` exists (copies from the template if missing).
+2. Loads configuration via `config/configuration.py` (merges user/global YAML,
+   runs prerequisite checks).
+3. Registers three builders:
+   - `BuildStata` and `BuildLatex` — from `gslab_scons`.
+   - **`BuildPdf`** — a **custom multi-pass builder** (see below).
+4. Uses the `MD5-timestamp` decider (rebuild only on content change).
+5. Sets up `gslab_scons` logging and loads the three step SConscripts in order.
+
+### Why a custom `BuildPdf` builder
+
+`gslab_scons.BuildLatex` runs pdflatex **exactly once**. The guidelines document
+has a table of contents, a list of tables, PDF bookmarks, and `\ref`
+cross-references — all of which need **≥2 passes** (bookmarks need 3). So
+`SConstruct` registers a third builder whose action runs
+`3.build-paper/code/build_pdf.py`, which loops pdflatex until the `.aux`
+stabilises (max 3 passes) from the pipeline root with forward-slash paths.
+
+### SConscripts
+
+Each step's `SConscript` declares targets with the registered builders.
+**Root-relative paths are mandatory** — SCons runs all commands from the
+pipeline root, so paths in `.do` files, `.tex` `\input{}`/`\loadfrag{}` calls,
+and `env.Install()` are all relative to the root (e.g.
+`\loadfrag{3.build-paper/input-data/table1.tex}`).
+
+A documented SCons quirk (`env.Install()` nodes don't always chain across
+SConscripts) is handled by listing the **upstream step's `output/` file** as a
+direct source **and** adding `env.Depends()` on the consuming step's
+`input-data/` copy.
+
+### Logging
+
+- **Per-step logs** — `gslab_scons` writes `<step>/temp/Sconscript_<log_ext>.log`.
+- **Top-level log** — `release/sconstruct.log` merges per-step logs with
+  timestamps. **On a real build, stdout is redirected there** — read it to debug
+  (the terminal shows little). Dry-runs (`-n`) print normally.
+
+## Configuration
+
+**`config_global.yaml`** (versioned) — shared settings:
+
+- `gslab_version` — must match the installed `GSLab_Tools` (currently `4.1.2`).
+- `executable_names` — `stata: StataSE-64`.
+- `prereq_checks` — `stata`/`latex`/`gslab_python` checked; **`git_lfs: No`**
+  (this pipeline does not use Git LFS).
+
+**`config_user.yaml`** (local, gitignored, auto-generated) — per-user overrides
+(`cache_directory`, `executable_names`). Edit only if your setup differs.
+
+All build paths are **hardcoded in the SConscripts**, not read from YAML — the
+YAML carries metadata, prerequisite checks, and user-specific executable
+discovery.
+
+## Testing
+
+Smoke tests guard the data-prep step against silent corruption (a missing
+standardised variable or a duplicated panel key would break every downstream
+table without any Stata error). They run **independently of SCons**:
+
+```bash
+pip install pytest pandas
+pytest tests/ -v
+```
+
+Checks: expected variables present, non-empty dataset, unique `idcode × year`
+panel key (required for `xtset`), `industry_grp` in range 1–7.
+
+## Adding a new table
+
+1. Add the `eststo`/`esttab using "2.generate-tables/output/<name>.tex"` block
+   to `2.generate-tables/code/generate_tables.do`.
+2. Declare the new fragment as a `target` in `2.generate-tables/SConscript`
+   (and add it to the `FRAGMENTS` list + `env.Install` if the paper embeds it).
+3. `\loadfrag{3.build-paper/input-data/<name>.tex}` (or `\input{...}` for
+   self-contained `tblr`/`prehead` files) in
+   `3.build-paper/code/stata2latex_guidelines.tex`.
+
+## Known issues
+
+The tabularray tables (`reg7_tblr.tex`, `table7_tblr.tex`) emit
+`! LaTeX3 error: Access to an entry beyond an array's bounds` from their
+`\SetCell[c=3]{...}` span rows. pdflatex (`nonstopmode`) recovers and the PDF is
+complete (41 pages). These messages are **pre-existing in the source tutorial**
+— same fragments, same content — not a pipeline regression.
+
+## Attribution
+
+This pipeline builds on three layers of prior work:
+
+- **GSLab template** ([upstream](https://github.com/gslab-econ/template), MIT) —
+  Gentzkow & Shapiro's reproducible-research scaffolding (SCons architecture,
+  builders), via the [`andyzhou66/template`](https://github.com/andyzhou66/template)
+  fork (this project's `../template`) and the
+  [`andyzhou66/gslab_python`](https://github.com/andyzhou66/gslab_python) builders.
+- **The Stata-to-LaTeX Guide** by [Asjad Naqvi](https://medium.com/the-stata-guide/the-stata-to-latex-guide-6e7ed5622856)
+  (Medium) — the original tutorial content.
+- **Yu Zhou's** adaptation of that guide to Stata built-in datasets, with the
+  custom `\loadfrag` wrapper and tabularray integration (`dou-bao-stata-to-latex`).
