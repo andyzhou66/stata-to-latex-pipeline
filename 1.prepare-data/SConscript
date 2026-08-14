@@ -1,0 +1,13 @@
+Import('env')
+
+# Step 1: prepare the nlswork analysis dataset.
+# Source : 1.prepare-data/code/prepare_data.do   (webuse nlswork + transforms)
+# Target : 1.prepare-data/output/nlswork_processed.dta
+env.BuildStata(
+    target  = ['#1.prepare-data/output/nlswork_processed.dta'],
+    source  = ['#1.prepare-data/code/prepare_data.do'],
+    log_ext = 'prepare_data'
+)
+
+# Hand the prepared dataset to step 2 (generate_tables.do reads it from input-data/).
+env.Install('#2.generate-tables/input-data', '#1.prepare-data/output/nlswork_processed.dta')

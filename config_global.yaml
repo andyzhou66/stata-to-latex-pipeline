@@ -1,0 +1,49 @@
+# GSLab Python Version (must match the installed GSLab_Tools distribution)
+gslab_version: 4.1.2
+
+# Build Directories (paths hardcoded in SConscripts; retained for logging)
+build:
+  prepare_data: 1.prepare-data/output
+  generate_tables: 2.generate-tables/output
+  paper: 3.build-paper/output
+
+# Source Directories (hardcoded in SConscripts; retained for logging)
+source:
+  prepare_data: 1.prepare-data/code
+  generate_tables: 2.generate-tables/code
+  paper: 3.build-paper/code
+
+# Input Directories (will record contents)
+input: None
+
+# Executable names
+executable_names:
+  python: None
+  r: None
+  stata: StataSE-64
+  matlab: None
+  lyx: none
+  latex: None
+
+# If True, check that application is installed/up-to-date before SCons run.
+# git_lfs is OFF: this demo does not version large files with LFS.
+prereq_checks:
+  git_lfs: No
+  gslab_python: Yes
+  python: No
+  r: No
+  stata: Yes
+  matlab: No
+  lyx: No
+  latex: Yes
+
+# Repository logging at end of SCons run
+scons_debrief_args:
+  look_in: release;1.prepare-data/code;2.generate-tables/code;3.build-paper/code
+  file_MB_limit_lfs: 2               # Soft limit on file size (w/ LFS)
+  total_MB_limit_lfs: 500            # Soft limit on total size (w/ LFS)
+  file_MB_limit: 0.5                 # Soft limit on file size (w/o LFS)
+  total_MB_limit: 125                # Soft limit on total size (w/o LFS)
+  git_attrib_path: .gitattributes    # Location of .gitattributes
+  MAXIT: 10                          # Max number of files in directory to log
+  log: state_of_repo.log             # Log name

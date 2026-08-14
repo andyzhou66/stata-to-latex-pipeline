@@ -1,0 +1,1155 @@
+% ==================================================
+%  Stata-to-LaTeX Table Automation Tutorial
+%  All tables use \loadfrag wrapper (no estwide/estauto)
+%  Built-in dataset version: NLS Work Survey
+% ==================================================
+
+\documentclass[11pt]{article}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%  Preamble Setup  %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+\input{3.build-paper/input-data/macro.tex}
+
+%% Links and references
+\usepackage[colorlinks=true, allcolors=blue, bookmarks=true, bookmarksnumbered=true, bookmarksopen=true]{hyperref}
+
+%% Math packages
+\usepackage{amssymb, amsfonts, amsmath}
+\usepackage{bm}
+
+%% Basic layout
+\usepackage[margin=1in]{geometry}
+\topskip        =   20pt
+\parskip        =   10pt
+\parindent      =   0 pt
+\baselineskip   =   15pt
+\usepackage{setspace}
+\onehalfspacing
+
+%% Table utilities
+\usepackage{adjustbox}
+\usepackage{caption}
+\usepackage{rotating}
+\numberwithin{table}{section}
+
+%% Core estout table packages
+\usepackage{booktabs}
+\usepackage[flushleft]{threeparttable}
+\usepackage{dcolumn}
+\newcolumntype{d}[1]{D{.}{.}{#1}}
+
+%% siunitx for decimal alignment and thousand separators
+\usepackage[group-separator={,}]{siunitx}
+
+% *****************************************************************
+% Estout LaTeX Wrapper (loadfrag only, estwide/estauto deprecated)
+% *****************************************************************
+%% Original wrapper framework by Jörg Weber:
+%% https://www.jwe.cc/2012/03/stata-latex-tables-estout/
+%%
+%% \loadfrag solves the extra blank line issue at the bottom of
+%% estout-generated tables by reading the fragment into a macro
+%% instead of using \input directly.
+
+\usepackage{filecontents,catchfile}
+
+% \loadfrag: reads a data-only .tex fragment and stores it in \mytable
+% Usage: \loadfrag{3.build-paper/input-data/filename.tex} then use \mytable inside tabular
+% For multi-panel tables, save fragments with \let\fragA\mytable before reloading
+\newcommand{\loadfrag}[1]{%
+	\begin{filecontents*}{#1}%
+	\end{filecontents*}%
+	\CatchFileDef{\mytable}{#1}{}%
+}
+
+%% Helper commands
+\newcommand{\specialcell}[2][c]{%
+	\begin{tabular}[#1]{@{}c@{}}#2\end{tabular}
+}
+\newcommand{\sym}[1]{\rlap{#1}}
+\usepackage{makecell}
+
+%% Modern tabularray environment
+\usepackage{tabularray}
+\UseTblrLibrary{booktabs, siunitx}
+
+%% Code listing setup
+\usepackage{listings}
+\usepackage{xcolor}
+\lstset{
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray!70},
+    stringstyle=\color{teal},
+    frame=single,
+    breaklines=true,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    escapeinside={/*@}{@*/}
+}
+\lstdefinelanguage{Stata}{
+    morekeywords={eststo, esttab, estpost, estadd, estclear, xtreg, sysuse, webuse, xtset, foreach, varlist, gen, replace, label, values, define, variable, sum, tabstat, regress, ttest, matrix, scalar, local, global, vce, cluster, re, fe, robust, drop, clear, save, di, version, set, more, off, varabbrev, inrange, missing, mod, r, e, by, if, listwise, columns, statistics, stat, nototal, unstack, par, fmt, star, keep, coeflabel, nomtitles, nodepvars, cells, nonumber, nonumbers, noobs, nonote, label, booktabs, compress, gap, alignment, collabels, eqlabels, mlabel, mtitle, mtitles, mgroups, prehead, postfoot, refcat, nolabel, addnotes, title, scalars, sfmt, main, aux, nostar, nodep, nomtitle, depname, using, replace, append, f, fragment}
+}
+\lstdefinestyle{stata}{
+    language=Stata,
+    morekeywords={eststo, esttab, estpost, estadd, xtreg, sysuse, xtset, estclear}
+}
+\lstdefinestyle{latex}{
+    language=TeX,
+    morekeywords={toprule, bottomrule, midrule, cmidrule, loadfrag, mytable, threeparttable, tablenotes}
+}
+
+%%%%%%%%%% End of preamble %%%%%%%%%%%%%%%%%%%%%
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%  Title Page       %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+\title{Stata-to-\LaTeX\ Table Automation Tutorial: Built-in Dataset Version}
+\author{A Structured Practical Guide Based on the estout Package}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\vspace{-2ex}
+\begin{flushleft}
+\small
+\textit{Based on the original tutorial:}\\
+Asjad Naqvi, ``The Stata-to-\LaTeX\ Guide'' (\url{https://medium.com/the-stata-guide/the-stata-to-latex-guide-6e7ed5622856})\\
+Adapted by Yu~Zhou --- restructured with Stata built-in datasets, a custom
+\texttt{\textbackslash loadfrag} wrapper replacing \texttt{estwide/estauto},
+and new sections covering \texttt{tabularray} integration.
+\end{flushleft}
+
+\begin{abstract}
+This paper demonstrates a fully automated workflow for generating publication-quality tables from Stata to \LaTeX\ using the \texttt{estout} package and the \texttt{\textbackslash loadfrag} wrapper. All examples use Stata's built-in \texttt{nlswork} dataset and can be replicated without external data sources. Every table is accompanied by complete Stata do-file code, full \LaTeX\ implementation code, and detailed technical notes.
+\end{abstract}
+
+\vspace{4ex}
+\small{\textit{Keywords}: Stata, \LaTeX, estout, esttab, descriptive statistics, regression tables}
+\vspace{2ex}
+\small{\textit{JEL}: C87, C88}
+
+\newpage
+\tableofcontents
+\newpage
+\listoftables
+\newpage
+
+
+% ==================================================
+%  Part 1: Descriptive Statistics Tables
+% ==================================================
+\section{Descriptive Statistics Tables}
+
+\subsection{Table 1: Overall Summary Statistics}
+\subsubsection{Purpose}
+Presents the full distribution of core variables including sum, mean, standard deviation, minimum, maximum, and observation count. This is the standard opening table for most empirical research papers.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+est clear
+estpost tabstat ln_wage_norm tenure_norm ttl_exp_norm hours_norm, ///
+    columns(statistics) statistics(sum mean sd min max count) listwise
+
+esttab using "table1.tex", replace ///
+    cells("sum(fmt(%13.0fc)) mean(fmt(%13.2fc)) sd(fmt(%13.2fc)) min max count") ///
+    nonumber nomtitle nonote noobs label booktabs f ///
+    collabels("Sum" "Mean" "SD" "Min" "Max" "N")
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{table}[htbp]
+    \centering
+    \begin{threeparttable}
+    \caption{Overall Summary Statistics}
+    \label{tab:table1}
+    \loadfrag{3.build-paper/input-data/table1.tex}
+    \begin{tabular}{lrrrrrr}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    \begin{tablenotes}
+        \small
+        \item Note: All variables are standardized. Data source: NLS Work Survey.
+    \end{tablenotes}
+    \end{threeparttable}
+\end{table}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{table}[htbp]
+    \centering
+    \begin{threeparttable}
+    \caption{Overall Summary Statistics}
+    \label{tab:table1_render}
+    \loadfrag{3.build-paper/input-data/table1.tex}
+    \begin{tabular}{lrrrrrr}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    \begin{tablenotes}
+        \small
+        \item Note: All variables are standardized. Data source: NLS Work Survey.
+    \end{tablenotes}
+    \end{threeparttable}
+\end{table}
+
+\subsubsection{Key Notes}
+\begin{itemize}
+    \item The \texttt{f (fragment)} option in Stata exports only the table body without the surrounding \texttt{tabular} environment.
+    \item \texttt{\textbackslash loadfrag} reads the fragment into the \texttt{\textbackslash mytable} macro, eliminating the extra blank line caused by direct \texttt{\textbackslash input}.
+    \item \texttt{fmt(\%13.0fc)} adds comma separators for thousands to improve readability of large numbers.
+\end{itemize}
+
+\clearpage
+\subsection{Table 2: Summary Statistics by Industry Groups}
+\subsubsection{Purpose}
+Reports means and standard deviations of key variables across 7 industry groups. This table uses the concise \texttt{main/aux} syntax.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+est clear
+estpost tabstat ln_wage_norm tenure_norm ttl_exp_norm hours_norm, ///
+    by(industry_grp) stat(mean sd) nototal columns(statistics) listwise
+
+esttab using "table2.tex", replace ///
+    main(mean %15.2f) aux(sd %15.2f) nostar nonumber unstack ///
+    nonote noobs gap label booktabs f collabels(none) ///
+    eqlabels("Agri & Mining" "Construction" "Manufacturing" ///
+             "Utils & Transp" "Wholesale & Retail" "Finance" ///
+             "Services & Other") nomtitles
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{table}[htbp]
+    \centering
+    \caption{Summary Statistics by Industry Groups}
+    \label{tab:table2}
+    \resizebox{\textwidth}{!}{
+    \loadfrag{3.build-paper/input-data/table2.tex}
+    \begin{tabular}{l*{14}{c}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    }
+\end{table}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{table}[htbp]
+    \centering
+    \caption{Summary Statistics by Industry Groups}
+    \label{tab:table2_render}
+    \resizebox{\textwidth}{!}{
+    \loadfrag{3.build-paper/input-data/table2.tex}
+    \begin{tabular}{l*{14}{c}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    }
+\end{table}
+
+\clearpage
+\subsection{Table 3: Summary Statistics (Full \texttt{cells} Customization)}
+\subsubsection{Purpose}
+Produces the same output as Table 2 but uses the fully customizable \texttt{cells} syntax, with standard deviations wrapped in parentheses.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+esttab using "table3.tex", replace ///
+    cells("mean(fmt(%15.2fc))" "sd(par fmt(%15.2fc))") ///
+    nostar unstack nonumber compress nonote noobs gap label booktabs f ///
+    collabels(none) ///
+    eqlabels("Agri & Mining" "Construction" "Manufacturing" ///
+             "Utils & Transp" "Wholesale & Retail" "Finance" ///
+             "Services & Other") nomtitles
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{table}[htbp]
+    \centering
+    \caption{Summary Statistics: Custom Cells Formatting}
+    \label{tab:table3}
+    \resizebox{\textwidth}{!}{
+    \loadfrag{3.build-paper/input-data/table3.tex}
+    \begin{tabular}{l*{14}{c}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    }
+\end{table}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{table}[htbp]
+    \centering
+    \caption{Summary Statistics: Custom Cells Formatting}
+    \label{tab:table3_render}
+    \resizebox{\textwidth}{!}{
+    \loadfrag{3.build-paper/input-data/table3.tex}
+    \begin{tabular}{l*{14}{c}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    }
+\end{table}
+
+\clearpage
+\subsection{Table T-Test: Two-Sample Mean Comparison}
+\subsubsection{Purpose}
+Compares mean differences between South and Non-South regions and reports t-test significance levels. Commonly used for balance tests and heterogeneity analysis.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+est clear
+estpost sum ln_wage_norm tenure_norm ttl_exp_norm hours_norm if south==1, listwise
+matrix obs_south = e(count)
+eststo group_south
+
+estpost sum ln_wage_norm tenure_norm ttl_exp_norm hours_norm if south==0, listwise
+matrix obs_nonsouth = e(count)
+eststo group_nonsouth
+
+eststo diff_ttest: estpost ttest ln_wage_norm tenure_norm ttl_exp_norm hours_norm, by(south) listwise
+
+esttab group_south group_nonsouth diff_ttest using "table_ttest.tex", replace ///
+    cells("mean(pattern(1 1 0) fmt(2)) b(star pattern(0 0 1) fmt(2)) ///
+           sd(pattern(1 1 0) par) t(pattern(0 0 1) par)") ///
+    nonumbers label booktabs f compress noobs nonote ///
+    mlabel("\makecell{South\\N=`=obs_south[1,1]'}" ///
+           "\makecell{Non-South\\N=`=obs_nonsouth[1,1]'}" "T-test", ///
+           prefix(\multicolumn{@span}{c}{) suffix(}) span ///
+           erepeat(\cmidrule(lr){@span}))
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{table}[htbp]
+    \centering
+    \caption{Mean Comparison: South vs. Non-South Regions}
+    \label{tab:ttest}
+    \loadfrag{3.build-paper/input-data/table_ttest.tex}
+    \begin{tabular}{lcccccc}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+\end{table}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{table}[htbp]
+    \centering
+    \caption{Mean Comparison: South vs. Non-South Regions}
+    \label{tab:ttest_render}
+    \loadfrag{3.build-paper/input-data/table_ttest.tex}
+    \begin{tabular}{lcccccc}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+\end{table}
+
+\clearpage
+\subsection{Table 5: Custom Bracket Style and Decimal Places}
+\subsubsection{Purpose}
+Demonstrates custom square brackets instead of default parentheses, and variable-specific decimal precision.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+est clear
+estpost tabstat ln_wage_norm tenure_norm ttl_exp_norm hours_norm, ///
+    by(industry_grp) stat(mean sd) nototal columns(statistics) listwise
+
+esttab using "table5.tex", replace ///
+    cells(mean(fmt(2)) sd(fmt(3) par([ ]))) nostar unstack nonumber ///
+    compress nonote noobs gap label booktabs f alignment(D{.}{.}{-1}) ///
+    collabels(none) ///
+    eqlabels("Agri & Mining" "Construction" "Manufacturing" ///
+             "Utils & Transp" "Wholesale & Retail" "Finance" ///
+             "Services & Other") nomtitles
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{table}[htbp]
+    \centering
+    \caption{Custom Decimal Places and Square Brackets}
+    \label{tab:table5}
+    \resizebox{\textwidth}{!}{
+    \loadfrag{3.build-paper/input-data/table5.tex}
+    \begin{tabular}{l*{14}{c}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    }
+\end{table}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{table}[htbp]
+    \centering
+    \caption{Custom Decimal Places and Square Brackets}
+    \label{tab:table5_render}
+    \resizebox{\textwidth}{!}{
+    \loadfrag{3.build-paper/input-data/table5.tex}
+    \begin{tabular}{l*{14}{c}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    }
+\end{table}
+
+\clearpage
+\subsection{Table 7: Wide Descriptive Statistics with Multicolumn Headers}
+\subsubsection{Purpose}
+Presents descriptive statistics (mean and SD) across all 7 industry groups in a single wide table using \texttt{\textbackslash multicolumn} span headers and \texttt{\textbackslash cmidrule} separators between groups. This is the standard format for papers requiring detailed subgroup comparisons in one view.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+// Reuses the estpost results from the Table 5/6 feed
+// prehead/postfoot create a self-contained tabular (required because
+// \cmidrule uses \noalign, which breaks inside \CatchFileDef/\loadfrag)
+esttab using "table7.tex", replace ///
+    cells("mean(fmt(2)) sd(fmt(2))") unstack nonumber ///
+    collabels("\textbf{Mean}" "SD") ///
+    booktabs label compress noobs nonote nomtitle ///
+    eqlabels("Agri \& Mining" "Construction" "Manufacturing" ///
+             "Utils \& Transp" "Wholesale \& Retail" "Finance" ///
+             "Services \& Other", ///
+             prefix(\multicolumn{@span}{c}{) suffix(}) span ///
+             erepeat(\cmidrule(lr){@span})) ///
+    prehead(\begin{tabular}{l*{14}{c}}\toprule) ///
+    postfoot(\bottomrule\end{tabular})
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{table}[htbp]
+    \centering
+    \caption{Wide Summary Statistics Across Industry Groups}
+    \label{tab:table7}
+    \hspace*{-0.4cm}%
+    \resizebox{1.05\textwidth}{!}{%
+    \input{3.build-paper/input-data/table7.tex}%  % self-contained tabular, shifted left to center
+    }
+\end{table}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{table}[htbp]
+    \centering
+    \caption{Wide Summary Statistics Across Industry Groups}
+    \label{tab:table7_render}
+    \hspace*{-0.4cm}%
+    \resizebox{1.05\textwidth}{!}{%
+    \input{3.build-paper/input-data/table7.tex}%
+    }
+\end{table}
+
+\subsubsection{Key Notes}
+\begin{itemize}
+    \item The \texttt{eqlabels} option with \texttt{prefix(\textbackslash multicolumn\{@span\}\{c\}\{} and \texttt{suffix(\})} creates group-level span headers. \texttt{@span} is an estout placeholder replaced by the number of columns in each equation group (here, 2 per group: mean + SD).
+    \item \texttt{erepeat(\textbackslash cmidrule(lr)\{@span\})} inserts a partial horizontal rule under each group header, visually separating industry groups.
+    \item The \texttt{collabels} option adds sub-headers (``Mean'' and ``SD'') repeated under each group.
+    \item With 14 data columns (7 groups $\times$ 2 statistics), the table is scaled via \texttt{\textbackslash resizebox} and shifted left with \texttt{\textbackslash hspace*} to center properly on the page.
+    \item \textbf{Why \texttt{prehead/postfoot} instead of fragment + \texttt{\textbackslash loadfrag}}: \texttt{\textbackslash cmidrule} internally uses \texttt{\textbackslash noalign}, which is illegal inside a \texttt{\textbackslash CatchFileDef} macro. By baking the full \texttt{\textbackslash begin\{tabular\}...\textbackslash end\{tabular\}} wrapper into the file via \texttt{prehead/postfoot}, the file becomes self-contained and can be loaded with bare \texttt{\textbackslash input}. Group labels containing \texttt{\&} must be escaped as \texttt{\textbackslash\&}.
+    \item Reuses the same \texttt{estpost tabstat} feed as Tables 5 and 6---no additional Stata computation needed.
+\end{itemize}
+
+\clearpage
+\subsection{Table 7\textunderscore tblr: Wide Table with tabularray (tblr) and siunitx}
+\subsubsection{Purpose}
+Reproduces Table 7 using the modern \texttt{tabularray} package. The key innovation is the \texttt{colspec} specification: each data column is \texttt{X[c,si=\{...\}]}---proportionally spaced with \texttt{siunitx} decimal alignment. The entire table environment is self-contained in the .tex file via \texttt{prehead()/postfoot()} and must be included with \texttt{\textbackslash input}, not \texttt{\textbackslash loadfrag}.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+// Triple-brace {{{ ... }}} escaping REQUIRED for literal braces in estout
+// \cmidrule uses [lr] square brackets in tabularray, NOT (lr) parentheses
+esttab using "table7_tblr.tex", replace ///
+    cells("mean(fmt(2)) sd(fmt(2))") unstack nonumber ///
+    collabels("{{{\textbf{Mean}}}}" "{{{SD}}}") ///
+    booktabs label f compress noobs nonote nomtitle ///
+    eqlabels("Agri & Mining" "Construction" "Manufacturing" ///
+             "Utils & Transp" "Wholesale & Retail" "Finance" ///
+             "Services & Other", ///
+             prefix(\SetCell[c=2]{c}{{{) suffix(}}} & ) span ///
+             erepeat(\cmidrule[lr]{@span})) ///
+    prehead(\begin{tblr}{width=1.8\linewidth,colspec={l *{14}{X[c,si={table-number-alignment=center,group-separator={,},group-minimum-digits=4}]}}} \toprule) ///
+    postfoot(\bottomrule\end{tblr})
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{table}[htbp]
+    \centering
+    \caption{Wide Summary Statistics (tabularray with siunitx)}
+    \label{tab:table7_tblr}
+    \input{3.build-paper/input-data/table7_tblr.tex}  % NOT \loadfrag -- self-contained tblr environment
+\end{table}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{table}[htbp]
+    \centering
+    \caption{Wide Summary Statistics (tabularray with siunitx)}
+    \label{tab:table7_tblr_render}
+    \input{3.build-paper/input-data/table7_tblr.tex}
+\end{table}
+
+\subsubsection{Key Notes}
+\begin{itemize}
+    \item \textbf{Why \texttt{\textbackslash input} not \texttt{\textbackslash loadfrag}}: \texttt{\textbackslash loadfrag} stores file content in a macro via \texttt{\textbackslash CatchFileDef}. Tabularray environments (\texttt{\textbackslash begin\{tblr\}...\textbackslash end\{tblr\}}) must be parsed directly---they cannot be hidden inside a macro. Hence bare \texttt{\textbackslash input}.
+    \item \textbf{Triple-brace escaping}: estout interprets \texttt{\{ \}} as grouping. To pass literal braces to the .tex file (for \texttt{\textbackslash SetCell}, \texttt{\textbackslash textbf}), they must be tripled: \texttt{\{\{\{ ... \}\}\}}.
+    \item \textbf{Square brackets in \texttt{\textbackslash cmidrule}}: In \texttt{tabularray} (with \texttt{\textbackslash UseTblrLibrary\{booktabs\}}), \texttt{\textbackslash cmidrule} uses \texttt{[lr]} square brackets, not \texttt{(lr)} parentheses---a common porting error.
+    \item \textbf{X columns with siunitx}: \texttt{X[c,si=\{...\}]} provides proportional-width columns with centered decimal alignment and comma thousands separators.
+    \item \textbf{\texttt{width=1.8\textbackslash linewidth}}: Unlike traditional tables needing \texttt{\textbackslash resizebox}, \texttt{tabularray} tables specify their own width directly in \texttt{colspec}.
+    \item \textbf{Trade-off}: Self-contained \texttt{tblr} files require more complex Stata code (triple-brace escaping, \texttt{\textbackslash SetCell} syntax), but they provide superior typographic control---proportional column widths, built-in siunitx integration, and no extra blank line issues.
+\end{itemize}
+
+\clearpage
+\subsection{Table 8: Grouped Descriptive Statistics with Category Headers}
+\subsubsection{Purpose}
+Organizes variables into thematic categories using \texttt{refcat} for section headers, ideal for tables with many variables.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+// Add indentation to variable labels for cleaner layout
+// *_norm vars must carry proper labels first (set in Section 2.2)
+foreach v of varlist ln_wage_norm tenure_norm {
+    label variable `v' `"\hspace{0.25cm}`:variable label `v''"'
+}
+foreach v of varlist ttl_exp_norm hours_norm age {
+    label variable `v' `"\hspace{0.25cm}`:variable label `v''"'
+}
+
+estpost tabstat ln_wage_norm tenure_norm ttl_exp_norm hours_norm age, ///
+    columns(statistics) stat(mean sd min max count)
+
+esttab using "table8.tex", replace ///
+    refcat(ln_wage_norm "\emph{Labor outcomes}" ttl_exp_norm "\vspace{0.1em} \\ \emph{Individual characteristics}", nolabel) ///
+    cells("mean(fmt(%15.2fc)) sd min max count(fmt(0))") nostar unstack nonumber ///
+    compress nomtitle nonote noobs gap label booktabs f ///
+    collabels("Mean" "SD" "Min" "Max" "N")
+
+// Restore clean labels before regressions
+label variable ln_wage_norm "Log wage (standardized)"
+label variable tenure_norm  "Tenure (standardized)"
+label variable ttl_exp_norm "Total work experience (standardized)"
+label variable hours_norm   "Hours worked (standardized)"
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{table}[htbp]
+    \centering
+    \caption{Summary Statistics by Variable Categories}
+    \label{tab:table8}
+    \loadfrag{3.build-paper/input-data/table8.tex}
+    \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lccccc}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular*}
+\end{table}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{table}[htbp]
+    \centering
+    \caption{Summary Statistics by Variable Categories}
+    \label{tab:table8_render}
+    \loadfrag{3.build-paper/input-data/table8.tex}
+    \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lccccc}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular*}
+\end{table}
+
+\clearpage
+% ==================================================
+%  Part 2: Regression Analysis Tables
+% ==================================================
+\section{Regression Analysis Tables}
+
+\subsection{Regression 1: Baseline Panel Regression}
+\subsubsection{Purpose}
+Reports core baseline regression results and compares coefficient stability with and without control variables.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+est clear
+eststo: xtreg ln_wage_norm tenure_norm ttl_exp_norm union, vce(cluster industry_grp)
+eststo: xtreg ln_wage_norm tenure_norm ttl_exp_norm union age south i.race, vce(cluster industry_grp)
+
+esttab using "reg1_frag.tex", replace f ///
+    b(3) se(3) nomtitle label star(* 0.10 ** 0.05 *** 0.01) ///
+    booktabs alignment(D{.}{.}{-1})
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{table}[htbp]
+    \centering
+    \begin{threeparttable}
+    \caption{Baseline Regression Results}
+    \label{reg:baseline}
+    \loadfrag{3.build-paper/input-data/reg1_frag.tex}
+    \begin{tabular}{l*{2}{d{3.3}}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    \begin{tablenotes}
+        \small
+        \item * p$<$0.1, ** p$<$0.05, *** p$<$0.01. Standard errors clustered by industry in parentheses.
+    \end{tablenotes}
+    \end{threeparttable}
+\end{table}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{table}[htbp]
+    \centering
+    \begin{threeparttable}
+    \caption{Baseline Regression Results}
+    \label{reg:baseline_render}
+    \loadfrag{3.build-paper/input-data/reg1_frag.tex}
+    \begin{tabular}{l*{2}{d{3.3}}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    \begin{tablenotes}
+        \small
+        \item * p$<$0.1, ** p$<$0.05, *** p$<$0.01. Standard errors clustered by industry in parentheses.
+    \end{tablenotes}
+    \end{threeparttable}
+\end{table}
+
+\clearpage
+\subsection{Regression 2: Multi-Model Robustness Comparison}
+\subsubsection{Purpose}
+Compares coefficient robustness across alternative econometric specifications: RE, FE, time fixed effects, and clustered standard errors.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+est clear
+eststo: xtreg ln_wage_norm L1.tenure_norm L1.ttl_exp_norm L1.union, re robust
+ estadd local FE  "No"
+ estadd local TE  "No"
+eststo: xtreg ln_wage_norm L1.tenure_norm L1.ttl_exp_norm L1.union i.year, re robust
+ estadd local FE  "No"
+ estadd local TE  "Yes"
+eststo: xtreg ln_wage_norm L1.tenure_norm L1.ttl_exp_norm L1.union, fe robust
+ estadd local FE  "Yes"
+ estadd local TE  "No"
+eststo: xtreg ln_wage_norm L1.tenure_norm L1.ttl_exp_norm L1.union i.year, fe robust
+ estadd local FE  "Yes"
+ estadd local TE  "Yes"
+
+test L1.tenure_norm = L1.ttl_exp_norm
+estadd scalar F_test = r(chi2)
+
+esttab using "reg2.tex", replace f ///
+    b(3) se(3) keep(L.tenure_norm L.ttl_exp_norm L.union) ///
+    coeflabel(L.tenure_norm "Tenure (t-1)" L.ttl_exp_norm "Experience (t-1)" L.union "Union status (t-1)") ///
+    star(* 0.10 ** 0.05 *** 0.01) ///
+    label booktabs nomtitle collabels(none) compress alignment(D{.}{.}{-1}) ///
+    scalars("N Obs." "rho \$\rho\$" "TE Time FE" "FE Individual FE" F_test) sfmt(3)
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{table}[htbp]
+    \centering
+    \caption{Robustness Checks: Alternative Model Specifications}
+    \label{reg:robust}
+    \resizebox{\textwidth}{!}{
+    \loadfrag{3.build-paper/input-data/reg2.tex}
+    \begin{tabular}{l*{6}{d{3.3}}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    }
+\end{table}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{table}[htbp]
+    \centering
+    \caption{Robustness Checks: Alternative Model Specifications}
+    \label{reg:robust_render}
+    \resizebox{\textwidth}{!}{
+    \loadfrag{3.build-paper/input-data/reg2.tex}
+    \begin{tabular}{l*{6}{d{3.3}}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    }
+\end{table}
+
+\clearpage
+\subsection{Regression 4: DID Interaction Coefficient Summary}
+\subsubsection{Purpose}
+Extracts only the key interaction coefficient from multiple specifications, stacked vertically. Standard format for difference-in-differences robustness tables.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+gen did = post * union
+
+est clear
+foreach y of varlist ln_wage_norm tenure_norm hours_norm {
+    eststo: xtreg `y' post union did, robust
+}
+esttab using "reg4.tex", replace f ///
+    b(3) se(3) star(* 0.10 ** 0.05 *** 0.01) ///
+    keep(did) coeflabel(did "Baseline") ///
+    label booktabs noobs nonotes collabels(none) alignment(D{.}{.}{-1}) ///
+    mtitles("Wage" "Tenure" "Hours")
+
+est clear
+foreach y of varlist ln_wage_norm tenure_norm hours_norm {
+    eststo: xtreg `y' post union did, vce(cluster idcode)
+}
+esttab using "reg4.tex", append f ///
+    b(3) se(3) star(* 0.10 ** 0.05 *** 0.01) ///
+    keep(did) coeflabel(did "Cluster SE") ///
+    label booktabs nodep nonum nomtitles nolines noobs nonotes collabels(none) alignment(D{.}{.}{-1})
+
+est clear
+foreach y of varlist ln_wage_norm tenure_norm hours_norm {
+    eststo: xtreg `y' post union did $controls, vce(cluster idcode)
+}
+esttab using "reg4.tex", append f ///
+    b(3) se(3) star(* 0.10 ** 0.05 *** 0.01) ///
+    keep(did) ///
+    label booktabs collabels(none) nomtitles nolines nonum alignment(D{.}{.}{-1}) ///
+    varlabels(did "Controls + Cluster SE")
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{table}[htbp]
+    \centering
+    \caption{DID Interaction Coefficients Across Specifications}
+    \label{reg:did}
+    \loadfrag{3.build-paper/input-data/reg4.tex}
+    \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}l*{3}{d{3.3}}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular*}
+\end{table}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{table}[htbp]
+    \centering
+    \caption{DID Interaction Coefficients Across Specifications}
+    \label{reg:did_render}
+    \loadfrag{3.build-paper/input-data/reg4.tex}
+    \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}l*{3}{d{3.3}}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular*}
+\end{table}
+
+\clearpage
+\subsection{Regression 6: Multi-Lag Dynamic Effects (Landscape)}
+\subsubsection{Purpose}
+Shows dynamic effects of multiple lagged regressors. Formatted in landscape orientation for wide tables.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+gen month_fe = mod(year, 12)
+global controls age south i.race
+
+est clear
+foreach y of varlist ln_wage_norm tenure_norm hours_norm {
+    eststo: xtreg `y' L(0 1 2 3).union i.month_fe, vce(cluster industry_grp)
+     estadd local CNTL "No"
+    eststo: xtreg `y' L(0 1 2 3).union $controls i.month_fe, vce(cluster industry_grp)
+     estadd local CNTL "Yes"
+}
+
+esttab using "reg6.tex", replace f ///
+    b(3) se(3) star(* 0.10 ** 0.05 *** 0.01) ///
+    keep(union L*) label booktabs nonotes noobs nomtitle collabels(none) ///
+    scalars("N Obs." "CNTL Controls") sfmt(0) ///
+    mgroups("Wage" "Tenure" "Hours", pattern(1 0 1 0 1 0) ///
+            prefix(\multicolumn{@span}{c}{) suffix(}) span ///
+            erepeat(\cmidrule(lr){@span}))
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{sidewaystable}[htbp]
+    \centering
+    \caption{Dynamic Effects of Union Membership}
+    \label{reg:dynamic}
+    \resizebox{0.95\textwidth}{!}{
+    \loadfrag{3.build-paper/input-data/reg6.tex}
+    \begin{tabular}{l*{6}{d{3.3}}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    }
+\end{sidewaystable}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{sidewaystable}[htbp]
+    \centering
+    \caption{Dynamic Effects of Union Membership}
+    \label{reg:dynamic_render}
+    \resizebox{0.95\textwidth}{!}{
+    \loadfrag{3.build-paper/input-data/reg6.tex}
+    \begin{tabular}{l*{6}{d{3.3}}}
+    \toprule
+    \mytable
+    \bottomrule
+    \end{tabular}
+    }
+\end{sidewaystable}
+
+\clearpage
+\subsection{Regression 7: Tabularray Regression Table with siunitx Columns}
+\subsubsection{Purpose}
+Demonstrates how to produce regression tables using the \texttt{tabularray} package. Each model occupies two adjacent columns---coefficient (with \texttt{siunitx} decimal alignment) and standard error (in parentheses). Scalar rows use \texttt{\textbackslash SetCell} to span both columns, and observation counts are formatted with \texttt{siunitx}'s \texttt{\textbackslash num} for thousand separators.
+
+\subsubsection{Stata Do-file Code}
+\begin{lstlisting}[style=stata]
+est clear
+eststo: reg ln_wage_norm tenure_norm ttl_exp_norm union, robust
+ estadd local Obs  "\SetCell[c=3]{c,cmd} \num[group-minimum-digits=4]{`=e(N)' }"
+ estadd local FE  "\SetCell[c=3]{c}{{{No}}}"
+eststo: reg ln_wage_norm tenure_norm ttl_exp_norm union age south i.race, robust
+ estadd local Obs  "\SetCell[c=3]{c,cmd} \num[group-minimum-digits=4]{`=e(N)' }"
+ estadd local FE  "\SetCell[c=3]{c}{{{No}}}"
+eststo: xtreg ln_wage_norm tenure_norm ttl_exp_norm union, fe robust
+ estadd local Obs  "\SetCell[c=3]{c,cmd} \num[group-minimum-digits=4]{`=e(N)' }"
+ estadd local FE  "\SetCell[c=3]{c}{{{Yes}}}"
+
+esttab using "reg7_tblr.tex", replace f ///
+    b(3) se(3) ///
+    star(* 0.10 ** 0.05 *** 0.01) ///
+    keep(tenure_norm ttl_exp_norm union) ///
+    label booktabs compress noobs nonotes nomtitles collabels(none) ///
+    stats(Obs FE, labels("Obs." "Ind. FE") fmt(0)) ///
+    prehead(\begin{tblr}{width=\linewidth, colspec={l *{3}{X[c]}}} \toprule) ///
+    postfoot(\bottomrule\end{tblr})
+\end{lstlisting}
+
+\subsubsection{LaTeX Implementation Code}
+\begin{lstlisting}[style=latex]
+\begin{table}[htbp]
+    \centering
+    \caption{Regression Results in tabularray Format}
+    \label{reg:reg7_tblr}
+    \input{3.build-paper/input-data/reg7_tblr.tex}  % NOT \loadfrag -- self-contained tblr environment
+\end{table}
+\end{lstlisting}
+
+\subsubsection{Rendered Output}
+\begin{table}[htbp]
+    \centering
+    \caption{Regression Results in tabularray Format}
+    \label{reg:reg7_tblr_render}
+    \input{3.build-paper/input-data/reg7_tblr.tex}
+\end{table}
+
+\subsubsection{Key Notes}
+\begin{itemize}
+    \item \textbf{Standard b/se layout}: \texttt{b(3) se(3)} produces the standard regression table format---coefficients on one row, standard errors in parentheses on the next. This is compatible with \texttt{tabularray} because each cell contains only a number (or number + stars), not a mix of stars and parenthesized content in the same cell.
+    \item \textbf{colspec with plain X columns}: \texttt{X[c]} provides proportional-width centered columns without \texttt{siunitx} decimal alignment. The \texttt{siunitx} approach is avoided here because standard errors in parentheses and significance stars (\texttt{\textbackslash sym\{***\}}) are not valid \texttt{siunitx} numerical input.
+    \item \textbf{\texttt{nomtitles}}: Suppresses esttab's automatic \texttt{\textbackslash multicolumn\{1\}\{c\}\{(1)\}} column-number headers, which \texttt{tabularray} rejects (tabularray requires \texttt{\textbackslash SetCell} instead). The column numbers are dropped for cleanliness; they can be added back via custom \texttt{mtitles()} if needed.
+    \item \textbf{\texttt{\textbackslash SetCell} for scalar rows}: \texttt{estadd local} values use \texttt{\textbackslash SetCell[c=3]\{c,cmd\}} to span all 3 model columns. The \texttt{cmd} key tells \texttt{tabularray} to execute the cell content as a command (e.g., \texttt{\textbackslash num[...]\{...\}} for \texttt{siunitx}-formatted observation counts).
+    \item As with Table 7\textunderscore tblr, this file must be included with \texttt{\textbackslash input} (not \texttt{\textbackslash loadfrag}) because it contains a self-contained \texttt{\textbackslash begin\{tblr\}...\textbackslash end\{tblr\}} environment.
+\end{itemize}
+
+\clearpage
+% ==================================================
+%  Part 3: Automated In-Text Numbers
+% ==================================================
+\section{Automated In-Text Numeric References}
+The \texttt{texresults} command exports statistics from Stata as reusable \LaTeX\ macros. When data or model specifications change, all in-text numbers update automatically without manual editing.
+
+Example: The baseline regression includes \Nreg{} observations, and the overall F-statistic of the model is \Fstat{}.
+
+This enables a fully reproducible workflow: data updates $\rightarrow$ re-run do-file $\rightarrow$ tables and in-text numbers all refresh automatically.
+
+% ==================================================
+%  Part 4: Command Reference
+% ==================================================
+\section{Complete Stata Command Reference}
+
+This section catalogs every Stata command and option used in this tutorial, organized by workflow stage. Use it as a quick reference when adapting the examples to your own tables.
+
+\subsection{estpost --- Gather Descriptive Statistics}
+
+\texttt{estpost} converts Stata command output into a format the \texttt{estout} suite can process. It \emph{does not} produce a table directly; it stages data for \texttt{esttab}.
+
+\subsubsection{estpost tabstat}
+Gathers summary statistics for a list of variables.
+
+\begin{lstlisting}[style=stata]
+estpost tabstat varlist, by(groupvar) stat(mean sd min max) columns(statistics) listwise
+\end{lstlisting}
+
+\begin{itemize}
+    \item \texttt{by(groupvar)} --- Compute statistics separately for each level of \texttt{groupvar}. Combined with \texttt{unstack} in \texttt{esttab} to produce group columns.
+    \item \texttt{stat(mean sd min max count)} --- Which statistics to compute; any \texttt{tabstat} statistic is allowed.
+    \item \texttt{columns(statistics)} --- Store statistics as equation-level results (required for \texttt{unstack} to work correctly).
+    \item \texttt{nototal} --- Suppress the ``Total'' row when using \texttt{by()}.
+    \item \texttt{listwise} --- Drop observations with missing values on any listed variable.
+\end{itemize}
+
+\subsubsection{estpost sum}
+Gathers summary statistics conditional on an \texttt{if} expression.
+
+\begin{lstlisting}[style=stata]
+estpost sum varlist if south==1, listwise
+\end{lstlisting}
+
+Same options as \texttt{estpost tabstat} except \texttt{columns(statistics)} is automatic; the stored result is a single equation per variable.
+
+\subsubsection{estpost ttest}
+Gathers two-sample $t$-test results (differences in means).
+
+\begin{lstlisting}[style=stata]
+eststo diff: estpost ttest varlist, by(groupvar) listwise
+\end{lstlisting}
+
+The stored results include $t$-statistics and $p$-values, which \texttt{esttab} can display via \texttt{cells()} with pattern specifications.
+
+\subsection{eststo --- Store Estimation Results}
+
+\texttt{eststo} stores one regression or tabulation result as a named model. Each \texttt{eststo} call represents \textbf{one column} in the final table.
+
+\begin{lstlisting}[style=stata]
+eststo: reg y x1 x2, robust        // prefix form
+eststo m1: xtreg y x1 x2, fe       // named model
+eststo group1                       // re-store from estpost
+\end{lstlisting}
+
+Key companion commands:
+\begin{itemize}
+    \item \texttt{eststo clear} --- Remove all stored models. Always call this before building a new table; otherwise old models persist and produce extra columns.
+    \item \texttt{est clear} --- Synonym for \texttt{eststo clear}.
+    \item \texttt{estimates store name} --- Base Stata equivalent; \texttt{eststo} is a convenience wrapper.
+\end{itemize}
+
+\subsection{estadd --- Add Custom Statistics to a Model}
+
+\texttt{estadd} attaches scalars or string labels to the most recently stored model. These appear as extra rows at the bottom of the table via \texttt{esttab}'s \texttt{scalars()} or \texttt{stats()} option.
+
+\begin{lstlisting}[style=stata]
+eststo: xtreg y x1 x2, fe robust
+ estadd local FE  "Yes"            // string label
+ estadd local TE  "No"
+ estadd scalar F_test = r(chi2)    // numeric test statistic
+\end{lstlisting}
+
+\begin{itemize}
+    \item \texttt{estadd local name "value"} --- Attach a text label (e.g., ``Yes''/``No'' for fixed effects indicators). Displayed via \texttt{scalars("name Label")} in \texttt{esttab}.
+    \item \texttt{estadd scalar name = expression} --- Attach a numeric value. Displayed via \texttt{scalars("name Label")} and formatted by \texttt{sfmt()}.
+\end{itemize}
+
+\subsection{esttab --- Export Tables to LaTeX}
+
+\texttt{esttab} is the main workhorse. It takes stored results from \texttt{eststo} or \texttt{estpost} and produces a \LaTeX\ file. Every table in this tutorial is generated by exactly one \texttt{esttab} call.
+
+\begin{lstlisting}[style=stata]
+esttab [namelist] using "filename.tex", replace [options]
+\end{lstlisting}
+
+\subsubsection{Core Export Options}
+
+\begin{itemize}
+    \item \texttt{using "filename.tex"} --- Output file path.
+    \item \texttt{replace} --- Overwrite existing file.
+    \item \texttt{append} --- Append to existing file (used for multi-panel regression tables like Regression 4).
+    \item \texttt{f} (or \texttt{fragment}) --- Export only the table body, without the surrounding \texttt{\textbackslash begin\{tabular\}...\textbackslash end\{tabular\}}. Use this with \texttt{\textbackslash loadfrag} on the \LaTeX\ side. \textbf{Do not} use \texttt{f} when supplying \texttt{prehead()/postfoot()} (they provide the wrapper instead).
+\end{itemize}
+
+\subsubsection{Content Selection: What Goes in the Table}
+
+\begin{itemize}
+    \item \texttt{cells(\emph{spec})} --- Fully customizable cell content. Each specifier controls one statistic per cell. Examples:
+    \begin{itemize}
+        \item \texttt{cells("mean(fmt(2)) sd(fmt(2))")} --- Mean and SD side-by-side within each group (descriptive tables).
+        \item \texttt{cells("b(star fmt(3)) se(par fmt(3))")} --- Coefficient with significance stars, then SE in parentheses (regression tables).
+        \item \texttt{cells("mean(pattern(1 1 0) fmt(2)) b(star pattern(0 0 1) fmt(2))")} --- Mean in columns 1--2, coefficient in column 3; \texttt{pattern()} controls which columns display each stat.
+    \end{itemize}
+    \item \texttt{b(\#)} --- Shorthand for \texttt{cells("b(fmt(\#))")}. Produces one coefficient row per variable.
+    \item \texttt{se(\#)} --- Shorthand for \texttt{cells("se(fmt(\#))")}. Produces one SE row per variable. Must be paired with \texttt{b(\#)}.
+    \item \texttt{main(mean fmt)} and \texttt{aux(sd fmt)} --- Concise syntax for descriptive tables. \texttt{main} is the primary statistic (large font), \texttt{aux} is the auxiliary statistic (smaller, typically in parentheses).
+    \item \texttt{keep(\emph{varlist})} --- Display only these coefficients/variables. Supports Stata wildcards (\texttt{*}). \textbf{Note}: wildcards work in \texttt{keep()} but do \emph{not} work in \texttt{coeflabel()} for lagged terms---use explicit names like \texttt{L.tenure\_norm}.
+    \item \texttt{coeflabel(\emph{mapping})} --- Rename coefficient rows. Each entry is \texttt{name "Display Label"}. For lagged variables, use \texttt{L.varname}, not \texttt{L1.varname}.
+    \item \texttt{varlabels(\emph{mapping})} --- Rename variable rows (descriptive tables). Supports \texttt{elist(\emph{varname} \textbackslash bottomrule)} to insert rules after specific rows.
+    \item \texttt{label} --- Use variable labels instead of variable names.
+    \item \texttt{nolabel} --- Use variable names, ignoring labels.
+\end{itemize}
+
+\subsubsection{Column and Row Layout}
+
+\begin{itemize}
+    \item \texttt{unstack} --- Expand group equations horizontally into side-by-side columns. Essential for \texttt{by()}-grouped descriptive tables. Without it, groups stack vertically.
+    \item \texttt{mgroups("\emph{Group1}" "\emph{Group2}", pattern(1 0 1 0) ...)} --- Group columns under shared headers. \texttt{pattern(1 0)} means: start group 1 at column 1, start group 2 at column 3, etc. Used in Regression 3 and 6.
+    \item \texttt{mtitles("\emph{Title1}" "\emph{Title2}")} --- Custom model column titles (replaces default dependent-variable names).
+    \item \texttt{nomtitles} or \texttt{nomtitle} --- Suppress model titles row entirely. \textbf{Required} for tabularray regression tables, since esttab's auto-generated \texttt{\textbackslash multicolumn} headers are incompatible with \texttt{tblr}.
+    \item \texttt{nonumbers} --- Suppress the (1) (2) (3) model-number row above column headers.
+    \item \texttt{nodepvars} or \texttt{nodep} --- Suppress the dependent-variable name row.
+    \item \texttt{noobs} --- Suppress the Observations/N row.
+    \item \texttt{nonotes} or \texttt{nonote} --- Suppress the table notes footer.
+    \item \texttt{gap} --- Add \texttt{\textbackslash addlinespace} between variable rows for visual grouping.
+    \item \texttt{compress} --- Reduce vertical spacing (recommended for most tables).
+    \item \texttt{nolines} --- Suppress horizontal rules between panels in multi-panel tables.
+\end{itemize}
+
+\subsubsection{Column Headers and Group Labels}
+
+\begin{itemize}
+    \item \texttt{collabels("\emph{Label1}" "\emph{Label2}")} --- Custom sub-column headers (repeated under each group when \texttt{unstack} is active).
+    \item \texttt{collabels(none)} --- Suppress all sub-column headers.
+    \item \texttt{eqlabels("\emph{Group1}" "\emph{Group2}", ...)} --- Label each equation group. Combined with \texttt{prefix()}, \texttt{suffix()}, \texttt{span}, and \texttt{erepeat()} to create group-level span headers:
+    \begin{itemize}
+        \item \texttt{prefix(\textbackslash multicolumn\{@span\}\{c\}\{)} --- Wrap each group label in a \texttt{\textbackslash multicolumn} spanning the group's columns. \texttt{@span} is replaced by estout with the column count per group.
+        \item \texttt{suffix(\})} --- Close the \texttt{\textbackslash multicolumn}.
+        \item \texttt{span} --- Enable the \texttt{@span} placeholder.
+        \item \texttt{erepeat(\textbackslash cmidrule(lr)\{@span\})} --- Insert \texttt{\textbackslash cmidrule} under each group header. For \texttt{tabularray}, use square brackets: \texttt{\textbackslash cmidrule[lr]\{@span\}}.
+    \end{itemize}
+    \item \texttt{mlabel("\emph{name}", prefix(\textbackslash multicolumn\{@span\}\{c\}\{) suffix(\}) ...)} --- Custom multi-column model labels. Used in the T-Test table to display group sample sizes.
+    \item \texttt{refcat(\emph{var} "\emph{text}" \emph{var2} "\emph{text2}", nolabel)} --- Insert category header rows before specified variables. Used in Table 8 to add ``Labor outcomes'' and ``Individual characteristics'' section headers.
+\end{itemize}
+
+\subsubsection{Significance Stars and Formatting}
+
+\begin{itemize}
+    \item \texttt{star(* 0.10 ** 0.05 *** 0.01)} --- Significance thresholds for one, two, and three stars. Social-science convention: 10\%, 5\%, 1\%.
+    \item \texttt{nostar} --- Suppress significance stars (used in descriptive tables).
+    \item \texttt{fmt(\emph{spec})} --- Number format: \texttt{fmt(2)} = two decimal places; \texttt{fmt(\%15.2fc)} = width 15, 2 decimals, comma separators; \texttt{fmt(1 2 3 4)} = variable-specific decimal places (Table 6).
+    \item \texttt{par} --- Wrap the statistic in parentheses (standard for SE display).
+    \item \texttt{par([ ])} --- Wrap in square brackets instead (Table 5).
+    \item \texttt{alignment(D\{.\}\{.\}\{-1\})} --- Use \texttt{dcolumn} decimal-aligned columns. \textbf{Not} compatible with \texttt{tabularray}.
+    \item \texttt{sfmt(\#)} --- Format for \texttt{scalars()} rows (e.g., \texttt{sfmt(3)} = 3 decimal places).
+    \item \texttt{booktabs} --- Use \texttt{\textbackslash toprule}, \texttt{\textbackslash midrule}, and \texttt{\textbackslash bottomrule} instead of \texttt{\textbackslash hline}. Always enable this for publication-quality tables.
+\end{itemize}
+
+\subsubsection{Custom Table Wrappers: prehead() and postfoot()}
+
+When \texttt{f} (fragment mode) is active, \texttt{prehead()} and \texttt{postfoot()} supply a custom table-environment wrapper:
+
+\begin{itemize}
+    \item \texttt{prehead(\textbackslash begin\{tabular\}\{l*\{14\}\{c\}\}\textbackslash toprule)} --- Start a traditional \texttt{tabular} environment (Table 7).
+    \item \texttt{postfoot(\textbackslash bottomrule\textbackslash end\{tabular\})} --- Close it.
+    \item \texttt{prehead(\textbackslash begin\{tblr\}\{...colspec=...\}\textbackslash toprule)} --- Start a \texttt{tabularray} environment (Table 7\_tblr, Regression 7).
+    \item \texttt{postfoot(\textbackslash bottomrule\textbackslash end\{tblr\})} --- Close it.
+\end{itemize}
+
+\textbf{Rule}: Files generated with \texttt{prehead/postfoot} contain a complete environment and must be loaded with bare \texttt{\textbackslash input\{file.tex\}} on the \LaTeX\ side---\emph{not} \texttt{\textbackslash loadfrag}.
+
+\subsubsection{Custom Statistic Rows: scalars() and stats()}
+
+\begin{itemize}
+    \item \texttt{scalars("name1 Label1" "name2 Label2" ...)} --- Add rows from \texttt{estadd local} or \texttt{estadd scalar} values. The \texttt{name} must match what was stored via \texttt{estadd}. The \texttt{Label} is the row header in the output.
+    \item \texttt{stats(name1 name2, labels("Label1" "Label2") fmt(0))} --- Alternative syntax; uses Stata's built-in \texttt{stats()} option from \texttt{estimates table}. More flexible for multi-model tables.
+\end{itemize}
+
+\subsection{texresults --- Export Scalars as LaTeX Macros}
+
+\texttt{texresults} writes a single Stata scalar result to a \LaTeX\ macro file. This enables in-text numbers (sample sizes, $F$-statistics, etc.) that auto-update when the analysis changes.
+
+\begin{lstlisting}[style=stata]
+texresults using "macro.tex", texmacro(Nreg) result(e(N)) replace
+texresults using "macro.tex", texmacro(Fstat) result(e(F)) append
+\end{lstlisting}
+
+\begin{itemize}
+    \item \texttt{texmacro(\emph{name})} --- Name of the \LaTeX\ macro to create (becomes \texttt{\textbackslash name\{\}}).
+    \item \texttt{result(\emph{expression})} --- Stata expression to evaluate (typically \texttt{e(N)}, \texttt{e(F)}, \texttt{e(r2)}).
+    \item \texttt{replace} --- Create a new \texttt{macro.tex} file.
+    \item \texttt{append} --- Add another macro to an existing \texttt{macro.tex} file.
+\end{itemize}
+
+\subsection{LaTeX-Side Wrapper Reference}
+
+\subsubsection{\texttt{\textbackslash loadfrag} --- Standard Fragment Loader}
+
+\begin{lstlisting}[style=latex]
+\loadfrag{3.build-paper/input-data/table1.tex}              % reads fragment into \mytable macro
+\begin{tabular}{lrrrrrr}
+\toprule
+\mytable                            % places the fragment body
+\bottomrule
+\end{tabular}
+\end{lstlisting}
+
+\textbf{Use when}: the .tex file is a pure fragment (generated with the \texttt{f} option, no \texttt{prehead/postfoot}). \texttt{\textbackslash loadfrag} eliminates the trailing blank line that bare \texttt{\textbackslash input} would produce.
+
+\textbf{Do NOT use when}: the fragment contains \texttt{\textbackslash cmidrule} (its \texttt{\textbackslash noalign} primitive is illegal inside \texttt{\textbackslash CatchFileDef}) or when the .tex file is a self-contained environment from \texttt{prehead/postfoot}.
+
+\subsubsection{\texttt{\textbackslash input} --- Direct File Inclusion}
+
+\begin{lstlisting}[style=latex]
+\input{3.build-paper/input-data/table7.tex}                  % self-contained file from prehead/postfoot
+\input{3.build-paper/input-data/table7_tblr.tex}            % self-contained tblr environment
+\end{lstlisting}
+
+\textbf{Use when}: the .tex file contains a complete \texttt{\textbackslash begin\{tabular\}...\textbackslash end\{tabular\}} or \texttt{\textbackslash begin\{tblr\}...\textbackslash end\{tblr\}} environment, or when the fragment contains \texttt{\textbackslash cmidrule}.
+
+\subsubsection{Quick Decision Table}
+
+\begin{tabular}{lll}
+\toprule
+\textbf{Generated .tex contains} & \textbf{Stata options} & \textbf{LaTeX inclusion} \\
+\midrule
+Fragment rows only (no wrapper) & \texttt{f} & \texttt{\textbackslash loadfrag} + hand-written \texttt{tabular} \\
+Complete \texttt{tabular} env.   & \texttt{prehead/postfoot} (no \texttt{f}) & \texttt{\textbackslash input} (bare) \\
+Complete \texttt{tblr} env.       & \texttt{f} + \texttt{prehead/postfoot} & \texttt{\textbackslash input} (bare) \\
+Fragment with \texttt{\textbackslash cmidrule} & \texttt{prehead/postfoot} (no \texttt{f}) & \texttt{\textbackslash input} (bare) \\
+\bottomrule
+\end{tabular}
+
+\subsection{Summary: When to Use Each Pattern}
+
+\begin{enumerate}
+    \item \textbf{Standard descriptive/regression table} $\rightarrow$ \texttt{f} fragment + \texttt{\textbackslash loadfrag} + hand-written \texttt{tabular} wrapper (Tables 1--6, 8, Regressions 1--4, 6).
+    \item \textbf{Wide table with \texttt{\textbackslash cmidrule}} $\rightarrow$ \texttt{prehead/postfoot} self-contained \texttt{tabular} + \texttt{\textbackslash input} (Table 7).
+    \item \textbf{Tabularray (tblr) table} $\rightarrow$ \texttt{f} + \texttt{prehead/postfoot} baking the \texttt{\textbackslash begin\{tblr\}} wrapper + \texttt{\textbackslash input} (Table 7\_tblr, Regression 7).
+    \item \textbf{Multi-panel regression} $\rightarrow$ first panel with \texttt{replace f}, subsequent panels with \texttt{append f} + \texttt{nodep nonum nomtitles nolines} (Regression 4).
+    \item \textbf{In-text numbers} $\rightarrow$ \texttt{texresults} exporting macros to \texttt{macro.tex} (Section 5).
+\end{enumerate}
+
+\section{Conclusion}
+This tutorial covers over 95\% of table formats used in applied empirical research. All code runs on Stata's built-in datasets and requires no external data. The core design principles are:
+\begin{enumerate}
+    \item Stata exports only table content (fragment mode); all layout decisions are made on the \LaTeX\ side.
+    \item Use \texttt{\textbackslash loadfrag} instead of direct \texttt{\textbackslash input} to eliminate extra blank lines at the bottom of tables---but remember that self-contained \texttt{tblr} environments (generated via \texttt{prehead/postfoot}) must use bare \texttt{\textbackslash input}, not \texttt{\textbackslash loadfrag}.
+    \item Use \texttt{estadd} and \texttt{texresults} for end-to-end automation of statistics and in-text numbers.
+    \item Standardize on the booktabs style with decimal alignment for publication-quality output.
+    \item For complex wide tables, consider the \texttt{tabularray} package: its \texttt{X[c,si=\{...\}]} columns provide proportional widths with built-in decimal alignment, eliminating the need for \texttt{\textbackslash resizebox} and separate \texttt{dcolumn}/\texttt{siunitx} column specifications.
+\end{enumerate}
+
+\end{document}

@@ -1,0 +1,32 @@
+Import('env')
+
+# Step 2: generate every LaTeX table fragment + macro.tex from the prepared data.
+# One Stata session produces all fragments because eststo / estadd / $controls /
+# label mutations flow within a single invocation (see CLAUDE.md "session-state
+# coupling" for why this is one .do rather than one .do per table).
+
+# Fragments the paper actually \loadfrag / \input's (kept in step 3's input-data/).
+FRAGMENTS = [
+    'table1.tex', 'table2.tex', 'table3.tex', 'table_ttest.tex',
+    'table5.tex', 'table7.tex', 'table7_tblr.tex', 'table8.tex',
+    'reg1_frag.tex', 'reg2.tex', 'reg4.tex', 'reg6.tex', 'reg7_tblr.tex',
+    'macro.tex',
+]
+# Generated but not embedded in the paper (still declared so SCons tracks them).
+EXTRA = ['table1_full.tex', 'table6.tex', 'reg1_full.tex', 'reg3.tex']
+
+env.BuildStata(
+    target  = ['#2.generate-tables/output/%s' % f for f in FRAGMENTS + EXTRA],
+    source  = ['#2.generate-tables/code/generate_tables.do',
+               '#1.prepare-data/output/nlswork_processed.dta'],
+    log_ext = 'generate_tables'
+)
+
+# Hand the embedded fragments to step 3.
+for f in FRAGMENTS:
+    env.Install('#3.build-paper/input-data', '#2.generate-tables/output/%s' % f)
+
+# Ensure the step-1 install copy lands before generate_tables.do reads it.
+# (env.Install nodes may not chain across SConscripts -- template CLAUDE.md gotcha #4.)
+env.Depends('#2.generate-tables/output/table1.tex',
+            '#2.generate-tables/input-data/nlswork_processed.dta')

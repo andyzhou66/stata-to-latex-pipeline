@@ -1,0 +1,29 @@
+Import('env')
+
+# Step 3: compile the guidelines PDF with the custom multi-pass builder.
+# BuildPdf -> SConstruct.build_pdf() -> 3.build-paper/code/build_pdf.py
+# (pdflatex looped until .aux stable, because the doc has TOC / LOT /
+#  bookmarks / \ref, which need >=2 passes that BuildLatex's single pass can't do).
+
+FRAGMENTS = [
+    'table1.tex', 'table2.tex', 'table3.tex', 'table_ttest.tex',
+    'table5.tex', 'table7.tex', 'table7_tblr.tex', 'table8.tex',
+    'reg1_frag.tex', 'reg2.tex', 'reg4.tex', 'reg6.tex', 'reg7_tblr.tex',
+    'macro.tex',
+]
+
+# Source = the .tex PLUS step 2's fragment outputs (direct refs, so SCons builds
+# step 2 first -- template CLAUDE.md gotcha #4). The .tex itself reads the
+# installed copies in input-data/ via \loadfrag{3.build-paper/input-data/...}.
+env.BuildPdf(
+    target = ['#3.build-paper/output/stata2latex_guidelines.pdf'],
+    source = ['#3.build-paper/code/stata2latex_guidelines.tex']
+           + ['#2.generate-tables/output/%s' % f for f in FRAGMENTS],
+)
+
+# Depend on the installed input-data copies (env.Install may not chain).
+env.Depends('#3.build-paper/output/stata2latex_guidelines.pdf',
+            ['#3.build-paper/input-data/%s' % f for f in FRAGMENTS])
+
+# Publish the PDF to release/ -- this is what makes Default('#release') resolve.
+env.Install('#release', '#3.build-paper/output/stata2latex_guidelines.pdf')
