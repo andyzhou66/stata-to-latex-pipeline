@@ -193,19 +193,40 @@ direct source **and** adding `env.Depends()` on the consuming step's
 
 ## Configuration
 
-**`config_global.yaml`** (versioned) — shared settings:
+Configuration is split across two YAML files:
 
-- `gslab_version` — must match the installed `GSLab_Tools` (currently `4.1.2`).
-- `executable_names` — `stata: StataSE-64`.
-- `prereq_checks` — `stata`/`latex`/`gslab_python` checked; **`git_lfs: No`**
-  (this pipeline does not use Git LFS).
+### `config_global.yaml` (versioned)
 
-**`config_user.yaml`** (local, gitignored, auto-generated) — per-user overrides
-(`cache_directory`, `executable_names`). Edit only if your setup differs.
+Shared settings that are the same for every collaborator:
 
-All build paths are **hardcoded in the SConscripts**, not read from YAML — the
-YAML carries metadata, prerequisite checks, and user-specific executable
-discovery.
+- **`gslab_version`** — The expected version of `gslab_python`. Must match the
+  installed `GSLab_Tools` (currently `4.1.2`); checked at build time.
+- **`executable_names`** — Default executable names (`stata: StataSE-64`;
+  `latex` resolves to the built-in `pdflatex`). Overridable per-user via
+  `config_user.yaml`.
+- **`prereq_checks`** — Which prerequisites to verify before building. This
+  pipeline checks `stata`, `latex`, and `gslab_python`; **`git_lfs: No`** (it
+  does not version large files with Git LFS).
+- **`scons_debrief_args`** — Thresholds and paths for the `state_of_repo.log`
+  end-of-build size report.
+
+### `config_user.yaml` (local, unversioned)
+
+Per-user settings. Automatically generated from `config_user_template.yaml` on
+the first build. Edit it to override:
+
+- **`cache_directory`** — Path for the SCons cache (only needed with
+  `mode=cache`).
+- **`release_directory`** — Path for local releases.
+- **`executable_names`** — Override the default executable (e.g.,
+  `stata: stata-mp` if you use Stata/MP instead of StataSE-64).
+- **`prereq_checks`** — Enable/disable specific prerequisite checks for your
+  machine.
+
+All path-related build logic (source directories, output directories,
+intermediate files) is **hardcoded in the SConscripts**, not read from YAML.
+The YAML files carry metadata for logging, prerequisite checks, and
+user-specific executable discovery.
 
 ## Testing
 
