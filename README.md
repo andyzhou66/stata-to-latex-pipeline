@@ -49,19 +49,9 @@ The full `estout` workflow for exporting Stata results to LaTeX:
 ### 2. Install the `gslab_scons` fork
 
 ```bash
-python -m pip install --upgrade --force-reinstall --no-deps \
+python -m pip install --no-deps \
   git+https://github.com/andyzhou66/gslab_python.git@master
 ```
-
-> **`--force-reinstall` is required.** If `GSLab_Tools==4.1.2` is already
-> installed, a plain `pip install` prints *"Requirement already satisfied"* and
-> keeps the **old** files — the build then crashes on `import gslab_scons`.
-> Install into the same Python that runs `scons` (3.11 here), not the project
-> `.venv`.
-
-The fork must be the Py3-patched `master` (commit `3e5dad1` or later fixes the
-last SCons-path Py2-ism, `raw_input`, and the Windows encoding/pdflatex-path
-issues).
 
 ### 3. Build
 
